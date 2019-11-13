@@ -1,0 +1,178 @@
+---
+title: "Employee Attrition"
+output: html_notebook
+---
+<body>
+  <h2>Introduction:</h2>
+    In a healthy economy, a certain amount of voluntary employee turnover is normal. People switch jobs for many considerations: family, convenience, compensation, growth opportunities, and more. However, it is always good to understand the reason behind the attrition so that proper measures can be taken to prevent talent drain.
+
+</body>
+
+<h2>Objective:</h2>
+The objective is to understand what factors contributed most to employee attrition and to create a model that can predict if a certain employee will leave the company or not. The goal also includes helping in formulating different retention strategies on targeted employees. Overall, the implementation of this model will allow management to create better decision-making actions.
+
+<h3>DATASET:</h3>
+We will start by importing the dataset and understanding the data at a high level.
+```{r}
+library(readxl)
+attrition <- read_excel("f:/Desktop/data science/attrition.xlsx")
+View(attrition)
+```
+
+<h3>IMPORTING THE NECESSARY LIBRARIES:</h3>
+```{r}
+library(ggplot2)
+library(ggExtra)
+library(gridExtra)
+library(caTools)
+library(ROCR)
+```
+
+<h4>DATASET FEATURES:</h4>
+```{r}
+names(attrition)
+```
+Out of the 9 variables we have 8 independent variables and one dependent/target variable which is Churn
+
+<h4>DATASET STRUCTURE:</h4>
+```{r}
+str(attrition)
+```
+
+<h4>DATASET SUMMARY:</h4>
+```{r}
+summary(att)
+```
+
+This gives us a high level view of the dataset. We can see that we dont have any NULL values in our dataset. 
+
+<h4>Employee Personal Details:</h4>
+```{r}
+p1 <- ggplot(att) + geom_histogram(aes(Age), binwidth = 5, fill = "red",col = "black")
+p2 <- ggplot(att) + geom_histogram(aes(FamilySize), binwidth = 5, fill = "red",col = "black")
+p3 <- ggplot(att) + geom_histogram(aes(Education), binwidth = 2, fill = "red",col = "black")
+p4 <- ggplot(att) + geom_histogram(aes(Calls), binwidth = 4, fill = "red",col = "black")
+
+grid.arrange(p1, p2, p3, p4, ncol = 2, nrow = 2)
+```
+
+<h4>Observations :</h4>
+
+1.)We see that the age,education and calls are right skewed and family size is left skewed
+
+<h4>Employee Work Details:</h4>
+```{r}
+p1 <- ggplot(attrition) + geom_bar(aes(Income), fill = "blue",col = "black")
+p2 <- ggplot(att) + geom_histogram(aes(Visits), binwidth = 5, fill = "blue",col = "black")
+p3 <- ggplot(att) + geom_histogram(aes(Calls), binwidth = 2, fill = "blue",col = "black")
+grid.arrange(p1, p2,p3, ncol=2, nrow = 2)
+
+```
+
+<h4>PLOT WITH TARGET VARIABLE:</h4>
+```{r}
+g1=ggplot(att,aes(x=Age,y=Churn,col=Churn))+geom_jitter()+labs(title = "AGE VS CHURN")
+g2=ggplot(att,aes(x=FamilySize,y=Churn,col=Churn))+geom_jitter()+labs(title = "FamilySize VS CHURN")
+g3=ggplot(att,aes(x=Education,y=Churn,col=Churn))+geom_jitter()+labs(title = "EDUCATION VS CHURN")
+g4=ggplot(att,aes(x=Visits,y=Churn,col=Churn))+geom_jitter()+labs(title = "VISITS VS CHURN")
+
+grid.arrange(g1,g2,g3,g4,nrow=2,ncol=2)
+```
+
+```{r}
+gr1=ggplot(att,aes(x = Age, fill = Churn)) + geom_density(alpha = 0.5) + ggtitle("Age") + theme(plot.title = element_text(size =10),axis.text.x = element_text(size =7,angle = 45, hjust = 1),axis.title.x=element_blank())
+gr2=ggplot(att,aes(x = Education, fill = Churn)) + geom_density(alpha = 0.5) + ggtitle("EDUCATION") + theme(plot.title = element_text(size =10),axis.text.x = element_text(size =7,angle = 45, hjust = 1),axis.title.x=element_blank())
+gr3=ggplot(att,aes(x = Calls, fill = Churn)) + geom_density(alpha = 0.5) + ggtitle("CALLS") + theme(plot.title = element_text(size =10),axis.text.x = element_text(size =7,angle = 45, hjust = 1),axis.title.x=element_blank())
+gr4=ggplot(att,aes(x = FamilySize, fill = Churn)) + geom_density(alpha = 0.5) + ggtitle("FAMILYSIZE") + theme(plot.title = element_text(size =10),axis.text.x = element_text(size =7,angle = 45, hjust = 1),axis.title.x=element_blank())
+
+gr5=ggplot(att,aes(x = Visits, fill = Churn)) + geom_density(alpha = 0.5) + ggtitle("VISITS") + theme(plot.title = element_text(size =10),axis.text.x = element_text(size =7,angle = 45, hjust = 1),axis.title.x=element_blank())
+grid.arrange(gr1,gr2,gr3,gr4,gr5,ncol=2,nrow=3)
+
+```
+
+<h3>HANDLING MISSING DATA:</h3>
+The common techniques to handle missing data are :
+
+1.Deletion of rows where values are missing. The downside of this method is the loss of information and drop in prediction power of model.
+
+2.In case of continuous variable, missing values can be replaced with mean or median of all known values of that variable. For categorical variables, we can use mode of the given values to replace the missing values.
+
+```{r}
+sum(is.na(att))
+```
+
+Luckily, we have no missing values in our dataset and hence we will move ahead.
+
+<h3>Predictive Modeling & Model Implementation:</h3>
+
+Dataset Split in Training and Test Sets
+Lets start with splitting the dataset into training and test. We will use the training dataset, to train our model and test its accuracy on the test dataset.
+
+We need to ensure that the churn data in both training and test set is of the same proporation as we have it in our main dataset to avoid any biases in prediction. For this we will use createDataPartition function.Our training dataset with have 80% of the rows whereas the test dataset will have the remaining 20%.
+
+```{r}
+splitat=sample.split(att,SplitRatio = 0.8)
+splitat
+trainat=subset(att,splitat=="TRUE")
+trainat
+testat=subset(att,splitat=="FALSE")
+testat
+```
+
+Here I’m going to keep just the correlated features: 
+  1.)We can see pvalue of GENDER,INCOME,FAMILYSIZE,VISITS and EDUCATION are significant.But in logistic regresiion we should also check residual error and aisc value
+  2.)we cant remove age from predicting because aisc value and residual error are increasing
+```{r}
+modelat=glm(Churn~.-CustID,trainat,family = "binomial")
+modelat
+summary(modelat)
+modelat1=glm(Churn~.-Age,trainat,family = "binomial")
+modelat1
+summary(modelat1)
+```
+  
+<h4>PREDICTING THE TEST DATA:</h4>
+```{r}
+preat=predict(modelat,testat,type = "response")
+preat
+```
+
+<h4>Accuracy measurement:</h4>
+We will be using ROCR library to measure the accuracy.
+1.)ROC is a graphical representation to show the connection/trade-off between sensitivity and specificity.
+
+```{r}
+rocrpre=prediction(preat,testat$Churn)
+rocrper=performance(rocrpre,"acc")
+plot(rocrper)
+```
+
+```{r}
+rocrper=performance(rocrpre,"tpr","fpr")
+plot(rocrper,colorize=TRUE)
+```
+
+Here we can see value around 0.3 , the line attains the maximum threshold. so we are going to predict the accuracy by using this value
+
+
+
+<h4>CHECKING ACCURACY:</h4>
+         1)Create table to check accuracy between actual value and predicted value
+```{r}
+t=table(AV=testat$Churn,PV=preat>0.3)
+t
+```
+
+```{r}
+plot(t,col=c("brown","black"),main="TABLE PLOT")
+```
+
+<h4>ACCURACY:</h4>
+```{r}
+accu=(21+9)/35
+accu
+```
+
+<h2>CONCLUSION:</h2>
+To conclude, we have seen the entire process where we started with importing the dataset, getting to know the dataset at a high level, and then moving on to data pre processing and then finally building models to prediction.
+FInally, I HAVE PREDICTED THE DATA WITH 86 PERCENT ACCURACY.
